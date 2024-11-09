@@ -1,162 +1,429 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+import json
+import os
+from datetime import datetime, timedelta
 
-class EducationApp:
+# Путь к файлам для хранения данных
+DATA_FILE = "user_data.json"
+ASSIGNMENTS_FILE = "assignments_data.json"
+
+class User:
+    def __init__(self, name, surname, status, password):
+        self.name = name
+        self.surname = surname
+        self.status = status
+        self.password = password
+        self.username = f"{name.lower()}_{surname.lower()}"
+        self.students = [] if self.status == "учитель" else None  # Список учеников для учителя
+
+    def save(self):
+        users = User.load_all()
+        users[self.username] = {
+            "name": self.name,
+            "surname": self.surname,
+            "status": self.status,
+            "password": self.password,
+            "students": self.students,  # Сохраняем список учеников, если это учитель
+            "username": self.username  # Добавляем username в данные
+        }
+        with open(DATA_FILE, 'w') as f:
+            json.dump(users, f, indent=4)
+
+    @staticmethod
+    def load_all():
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+
+    @staticmethod
+    def find(username):
+        users = User.load_all()
+        return users.get(username, None)
+
+
+class Assignment:
+    def __init__(self, teacher_username, student_username, title, description, deadline):
+        self.teacher_username = teacher_username
+        self.student_username = student_username
+        self.title = title
+        self.description = description
+        self.deadline = deadline
+        self.submission = None  # Initially no submission
+
+    def save(self):
+        assignments = Assignment.load_all()
+        assignments[self.title] = {
+            "teacher": self.teacher_username,
+            "student": self.student_username,
+            "title": self.title,
+            "description": self.description,
+            "deadline": self.deadline,
+            "submission": self.submission  # Store the student's submission
+        }
+        with open(ASSIGNMENTS_FILE, 'w') as f:
+            json.dump(assignments, f, indent=4)
+
+    @staticmethod
+    def load_all():
+        if os.path.exists(ASSIGNMENTS_FILE):
+            with open(ASSIGNMENTS_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+
+    @staticmethod
+    def get_by_student(student_username):
+        assignments = Assignment.load_all()
+        return {title: assignment for title, assignment in assignments.items() if assignment["student"] == student_username}
+
+    @staticmethod
+    def get_by_teacher(teacher_username):
+        assignments = Assignment.load_all()
+        return {title: assignment for title, assignment in assignments.items() if assignment["teacher"] == teacher_username}
+
+
+class Application:
     def __init__(self, root):
         self.root = root
-        self.root.title("Образовательная платформа")
-        self.root.geometry("800x600")
+        self.root.title("Взаимодействие Учителя и Ученика")
+        self.root.geometry("500x550")
+        self.root.configure(bg="#E6E6FA")
 
-        # Создаем notebook
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(pady=10, expand=True, fill='both')
+        tk.Label(self.root, text="Добро пожаловать в систему!", font=("Arial", 24, "bold"), bg="#E6E6FA", fg="black").pack(pady=20)
+        tk.Button(self.root, text="Регистрация", command=self.open_registration_window, bg="#4CAF50", fg="black", font=("Arial", 16), width=25, height=2, relief="raised", bd=5).pack(pady=15)
+        tk.Button(self.root, text="Авторизация", command=self.open_login_window, bg="#2196F3", fg="black", font=("Arial", 16), width=25, height=2, relief="raised", bd=5).pack(pady=15)
 
-        # Создаем вкладки
-        self.auth_tab = ttk.Frame(self.notebook)
-        self.test_tab = ttk.Frame(self.notebook)
-        self.lesson_tab = ttk.Frame(self.notebook)
-        self.homework_tab = ttk.Frame(self.notebook)
+    def open_registration_window(self):
+        registration_window = tk.Toplevel(self.root)
+        registration_window.title("Регистрация")
+        registration_window.geometry("500x700")  # Увеличиваем размер окна
+        registration_window.configure(bg="#E6E6FA")
 
-        # Добавляем вкладки в notebook
-        self.notebook.add(self.auth_tab, text="Авторизация")
-        self.notebook.add(self.test_tab, text="Тестирование")
-        self.notebook.add(self.lesson_tab, text="Урок")
-        self.notebook.add(self.homework_tab, text="Домашнее задание")
+        tk.Label(registration_window, text="Имя:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_name = tk.Entry(registration_window, font=("Arial", 16), relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_name.pack(pady=10, padx=20, fill="x")
 
-        # Создаем содержимое вкладок
-        self.create_auth_tab()
-        self.create_test_tab()
-        self.create_lesson_tab()
-        self.create_homework_tab()
+        tk.Label(registration_window, text="Фамилия:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_surname = tk.Entry(registration_window, font=("Arial", 16), relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_surname.pack(pady=10, padx=20, fill="x")
 
-        # Изначально блокируем все вкладки кроме авторизации
-        self.disable_tabs()
+        tk.Label(registration_window, text="Статус:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
 
-    def disable_tabs(self):
-        """Блокировка всех вкладок кроме авторизации"""
-        self.notebook.tab(1, state='disabled')
-        self.notebook.tab(2, state='disabled')
-        self.notebook.tab(3, state='disabled')
+        status_var = tk.StringVar(value="ученик")
 
-    def enable_tabs(self):
-        """Разблокировка всех вкладок"""
-        self.notebook.tab(1, state='normal')
-        self.notebook.tab(2, state='normal')
-        self.notebook.tab(3, state='normal')
+        radio_teacher = tk.Radiobutton(registration_window, text="Учитель", variable=status_var, value="учитель", font=("Arial", 16), bg="#E6E6FA", fg="#333333")
+        radio_teacher.pack(pady=5)
 
-    def create_auth_tab(self):
-        """Создание вкладки авторизации"""
-        # Создаем фрейм для центрирования элементов
-        auth_frame = ttk.Frame(self.auth_tab)
-        auth_frame.place(relx=0.5, rely=0.5, anchor='center')
+        radio_student = tk.Radiobutton(registration_window, text="Ученик", variable=status_var, value="ученик", font=("Arial", 16), bg="#E6E6FA", fg="#333333")
+        radio_student.pack(pady=5)
 
-        # Заголовок
-        title_label = ttk.Label(auth_frame, text="Авторизация", font=("Arial", 16, "bold"))
-        title_label.grid(row=0, column=0, columnspan=2, pady=20)
+        status_label = tk.Label(registration_window, text=f"Вы выбрали статус: {status_var.get()}", bg="#E6E6FA", fg="#333333", font=("Arial", 14))
+        status_label.pack(pady=10)
 
-        # Логин
-        login_label = ttk.Label(auth_frame, text="Логин:")
-        login_label.grid(row=1, column=0, padx=5, pady=5)
-        self.login_entry = ttk.Entry(auth_frame)
-        self.login_entry.grid(row=1, column=1, padx=5, pady=5)
+        def update_status(*args):
+            status_label.config(text=f"Вы выбрали статус: {status_var.get()}")
 
-        # Пароль
-        password_label = ttk.Label(auth_frame, text="Пароль:")
-        password_label.grid(row=2, column=0, padx=5, pady=5)
-        self.password_entry = ttk.Entry(auth_frame, show="*")
-        self.password_entry.grid(row=2, column=1, padx=5, pady=5)
+        status_var.trace_add("write", update_status)
 
-        # Кнопка входа
-        login_button = ttk.Button(auth_frame, text="Войти", command=self.login)
-        login_button.grid(row=3, column=0, columnspan=2, pady=20)
+        tk.Label(registration_window, text="Пароль:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_password = tk.Entry(registration_window, font=("Arial", 16), show="*", relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_password.pack(pady=10, padx=20, fill="x")
 
-    def create_test_tab(self):
-        """Создание вкладки тестирования"""
-        # Заголовок
-        title_label = ttk.Label(self.test_tab, text="Тестирование", font=("Arial", 16, "bold"))
-        title_label.pack(pady=20)
+        tk.Label(registration_window, text="Повторите пароль:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_confirm_password = tk.Entry(registration_window, font=("Arial", 16), show="*", relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_confirm_password.pack(pady=10, padx=20, fill="x")
 
-        # Пример теста
-        test_frame = ttk.Frame(self.test_tab)
-        test_frame.pack(pady=10)
+        def register():
+            name = entry_name.get()
+            surname = entry_surname.get()
+            status = status_var.get()
+            password = entry_password.get()
+            confirm_password = entry_confirm_password.get()
 
-        # Вопрос
-        question_label = ttk.Label(test_frame, text="Вопрос 1: Выберите правильный ответ")
-        question_label.pack(pady=10)
+            if name and surname and password and confirm_password:
+                if password == confirm_password:
+                    user = User(name, surname, status, password)
+                    user.save()
+                    messagebox.showinfo("Успех", "Регистрация прошла успешно!")
+                    registration_window.destroy()
+                else:
+                    messagebox.showwarning("Ошибка", "Пароли не совпадают!")
+            else:
+                messagebox.showwarning("Ошибка", "Пожалуйста, заполните все поля корректно.")
 
-        # Варианты ответов
-        self.test_var = tk.StringVar()
-        answers = [("Ответ A", "A"), ("Ответ B", "B"), ("Ответ C", "C")]
+        tk.Button(registration_window, text="Зарегистрироваться", command=register, bg="#4CAF50", fg="black", font=("Arial", 16), width=22, height=2, relief="raised", bd=5).pack(pady=30)
 
-        for text, value in answers:
-            radio = ttk.Radiobutton(test_frame, text=text, value=value, variable=self.test_var)
-            radio.pack()
+    def open_login_window(self):
+        login_window = tk.Toplevel(self.root)
+        login_window.title("Авторизация")
+        login_window.geometry("500x500")
+        login_window.configure(bg="#E6E6FA")
 
-        # Кнопка отправки
-        submit_button = ttk.Button(test_frame, text="Отправить ответ")
-        submit_button.pack(pady=20)
+        tk.Label(login_window, text="Имя:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_name = tk.Entry(login_window, font=("Arial", 16), relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_name.pack(pady=10, padx=20, fill="x")
 
-    def create_lesson_tab(self):
-        """Создание вкладки урока"""
-        # Заголовок
-        title_label = ttk.Label(self.lesson_tab, text="Урок", font=("Arial", 16, "bold"))
-        title_label.pack(pady=20)
+        tk.Label(login_window, text="Фамилия:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_surname = tk.Entry(login_window, font=("Arial", 16), relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_surname.pack(pady=10, padx=20, fill="x")
 
-        # Содержание урока
-        lesson_text = tk.Text(self.lesson_tab, height=15, width=60)
-        lesson_text.pack(pady=10)
-        lesson_text.insert(tk.END, "Содержание урока...\n\n")
-        lesson_text.config(state='disabled')
+        tk.Label(login_window, text="Пароль:", bg="#E6E6FA", fg="black", font=("Arial", 16)).pack(pady=10)
+        entry_password = tk.Entry(login_window, font=("Arial", 16), show="*", relief="flat", highlightthickness=2, highlightbackground="#8A2BE2", width=30)
+        entry_password.pack(pady=10, padx=20, fill="x")
 
-        # Кнопки навигации
-        nav_frame = ttk.Frame(self.lesson_tab)
-        nav_frame.pack(pady=10)
+        def login():
+            name = entry_name.get()
+            surname = entry_surname.get()
+            password = entry_password.get()
 
-        prev_button = ttk.Button(nav_frame, text="Предыдущий урок")
-        prev_button.pack(side=tk.LEFT, padx=5)
+            if name and surname and password:
+                username = f"{name.lower()}_{surname.lower()}"
+                user = User.find(username)
+                if user and user["password"] == password:
+                    if user["status"] == "учитель":
+                        self.open_teacher_window(username)
+                    else:
+                        self.open_student_window(username)
+                    login_window.destroy()
+                else:
+                    messagebox.showwarning("Ошибка", "Неверные данные для входа.")
+            else:
+                messagebox.showwarning("Ошибка", "Пожалуйста, заполните все поля корректно.")
 
-        next_button = ttk.Button(nav_frame, text="Следующий урок")
-        next_button.pack(side=tk.LEFT, padx=5)
+        tk.Button(login_window, text="Войти", command=login, bg="#2196F3", fg="black", font=("Arial", 16), width=22, height=2, relief="raised", bd=5).pack(pady=30)
 
-    def create_homework_tab(self):
-        """Создание вкладки домашнего задания"""
-        # Заголовок
-        title_label = ttk.Label(self.homework_tab, text="Домашнее задание", font=("Arial", 16, "bold"))
-        title_label.pack(pady=20)
+    def open_teacher_window(self, username):
+        teacher_window = tk.Toplevel(self.root)
+        teacher_window.title("Учитель")
+        teacher_window.geometry("600x800")
+        teacher_window.configure(bg="#E6E6FA")
 
-        # Задание
-        task_label = ttk.Label(self.homework_tab, text="Задание:", font=("Arial", 12))
-        task_label.pack(pady=5)
+        # Создаем холст для прокрутки
+        canvas = tk.Canvas(teacher_window, bg="#E6E6FA")
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        task_text = tk.Text(self.homework_tab, height=5, width=60)
-        task_text.pack(pady=10)
-        task_text.insert(tk.END, "Текст задания...\n")
-        task_text.config(state='disabled')
+        # Добавляем полосу прокрутки
+        scrollbar = tk.Scrollbar(teacher_window, orient=tk.VERTICAL, command=canvas.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Поле для ответа
-        answer_label = ttk.Label(self.homework_tab, text="Ваш ответ:", font=("Arial", 12))
-        answer_label.pack(pady=5)
+        # Связываем полосу прокрутки с холстом
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        self.answer_text = tk.Text(self.homework_tab, height=10, width=60)
-        self.answer_text.pack(pady=10)
+        # Создаем фрейм внутри холста для размещения виджетов
+        teacher_frame = tk.Frame(canvas, bg="#E6E6FA")
+        canvas.create_window((0, 0), window=teacher_frame, anchor="nw")
 
-        # Кнопка отправки
-        submit_button = ttk.Button(self.homework_tab, text="Отправить ответ")
-        submit_button.pack(pady=10)
+        # Загрузить данные учителя
+        users = User.load_all()
+        teacher = users[username]
 
-    def login(self):
-        """Обработка входа в систему"""
-        login = self.login_entry.get()
-        password = self.password_entry.get()
+        # Показать прикрепленных учеников
+        tk.Label(teacher_frame, text="Прикрепленные ученики:", font=("Arial", 16), bg="#E6E6FA", fg="black").pack(pady=10)
+        attached_students_listbox = tk.Listbox(teacher_frame, font=("Arial", 14), height=5, width=50)
+        attached_students_listbox.pack(pady=10)
 
-        if login and password:
-            messagebox.showinfo("Успех", "Вход выполнен успешно!")
-        self.enable_tabs()
+        # Загружаем прикрепленных учеников
+        for student_username in teacher["students"]:
+            student = users.get(student_username)
+            attached_students_listbox.insert(tk.END, f"{student['name']} {student['surname']}")
 
-def main():
-    root = tk.Tk()
-    app = EducationApp(root)
-    root.mainloop()
+        # Список всех учеников для прикрепления
+        tk.Label(teacher_frame, text="Все ученики:", font=("Arial", 16), bg="#E6E6FA", fg="black").pack(pady=10)
+        all_students_listbox = tk.Listbox(teacher_frame, font=("Arial", 14), height=5, width=50)
+        all_students_listbox.pack(pady=10)
+
+        # Загружаем всех учеников
+        for user in users.values():
+            if user["status"] == "ученик" and username not in teacher["students"]:
+                all_students_listbox.insert(tk.END, f"{user['name']} {user['surname']}")
+
+        # Функция прикрепления ученика
+        def attach_student():
+            selected_student = all_students_listbox.curselection()
+            if selected_student:
+                selected_student_name = all_students_listbox.get(selected_student[0]).split()[0]
+                selected_student_surname = all_students_listbox.get(selected_student[0]).split()[1]
+                student_username = f"{selected_student_name.lower()}_{selected_student_surname.lower()}"
+
+                if student_username not in teacher["students"]:
+                    teacher["students"].append(student_username)
+
+                    # Сохраняем обновленного учителя
+                    users[username] = teacher
+                    with open(DATA_FILE, 'w') as f:
+                        json.dump(users, f, indent=4)
+
+                    # Обновляем список прикрепленных учеников
+                    attached_students_listbox.insert(tk.END, f"{selected_student_name} {selected_student_surname}")
+                    all_students_listbox.delete(selected_student[0])
+
+                    messagebox.showinfo("Успех",
+                                        f"Ученик {selected_student_name} {selected_student_surname} прикреплен!")
+                else:
+                    messagebox.showwarning("Ошибка", "Этот ученик уже прикреплен.")
+            else:
+                messagebox.showwarning("Ошибка", "Выберите ученика для прикрепления.")
+
+        tk.Button(teacher_frame, text="Прикрепить ученика", command=attach_student, bg="#8A2BE2", fg="black",
+                  font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=10)
+
+        # Section for creating assignments
+        tk.Label(teacher_frame, text="Создать домашнее задание:", font=("Arial", 16), bg="#E6E6FA", fg="black").pack(pady=10)
+        tk.Label(teacher_frame, text="Заголовок задания:", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=5)
+        entry_title = tk.Entry(teacher_frame, font=("Arial", 14), width=40)
+        entry_title.pack(pady=5)
+        tk.Label(teacher_frame, text="Описание задания:", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=5)
+        entry_description = tk.Entry(teacher_frame, font=("Arial", 14), width=40)
+        entry_description.pack(pady=5)
+        tk.Label(teacher_frame, text="Срок выполнения:", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=5)
+        entry_deadline = tk.Entry(teacher_frame, font=("Arial", 14), width=40)
+        entry_deadline.pack(pady=5)
+
+        def assign_homework():
+            title = entry_title.get()
+            description = entry_description.get()
+            deadline = entry_deadline.get()
+            if title and description and deadline:
+                selected_student = attached_students_listbox.curselection()
+                if selected_student:
+                    selected_student_name = attached_students_listbox.get(selected_student[0]).split()[0]
+                    selected_student_surname = attached_students_listbox.get(selected_student[0]).split()[1]
+                    student_username = f"{selected_student_name.lower()}_{selected_student_surname.lower()}"
+                    assignment = Assignment(username, student_username, title, description, deadline)
+                    assignment.save()
+                    messagebox.showinfo("Успех",
+                                        f"Задание для {selected_student_name} {selected_student_surname} успешно создано!")
+                    entry_title.delete(0, tk.END)
+                    entry_description.delete(0, tk.END)
+                    entry_deadline.delete(0, tk.END)
+                else:
+                    messagebox.showwarning("Ошибка", "Выберите ученика для задания!")
+            else:
+                messagebox.showwarning("Ошибка", "Пожалуйста, заполните все поля!")
+
+        tk.Button(teacher_frame, text="Назначить задание", command=assign_homework, bg="#8A2BE2", fg="black",
+                  font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=10)
+
+        # Определение списка для сданных заданий
+        submitted_assignments_listbox = tk.Listbox(teacher_frame, font=("Arial", 14), height=10, width=50)
+        submitted_assignments_listbox.pack(pady=10)
+
+        def load_submitted_assignments():
+            assignments = Assignment.get_by_teacher(username)
+            submitted_assignments_listbox.delete(0, tk.END)  # Очистить список перед загрузкой
+            for assignment in assignments.values():
+                submission_status = " (Сдано)" if assignment.get("submission") else " (Не сдано)"
+                submitted_assignments_listbox.insert(tk.END, f"{assignment['title']}{submission_status}")
+
+        def view_submission():
+            selected_assignment = submitted_assignments_listbox.curselection()
+            if selected_assignment:
+                assignment_title = submitted_assignments_listbox.get(selected_assignment[0]).split(" (")[0]
+                assignments = Assignment.get_by_teacher(username)
+                assignment_data = assignments.get(assignment_title)
+
+                if assignment_data and assignment_data.get("submission"):
+                    submission_window = tk.Toplevel(teacher_window)
+                    submission_window.title(f"Решение: {assignment_title}")
+                    submission_window.geometry("600x500")
+                    submission_window.configure(bg="#E6E6FA")
+
+                    tk.Label(submission_window, text=f"Решение для задания '{assignment_title}':", font=("Arial", 16),
+                             bg="#E6E6FA", fg="black").pack(pady=10)
+
+                    submission_text = tk.Text(submission_window, font=("Arial", 14), wrap=tk.WORD, width=50, height=15)
+                    submission_text.insert(tk.END, assignment_data["submission"])
+                    submission_text.config(state=tk.DISABLED)
+                    submission_text.pack(pady=10)
+
+                    tk.Button(submission_window, text="Закрыть", command=submission_window.destroy, bg="#FF5733",
+                              fg="black", font=("Arial", 14), width=22, height=2).pack(pady=20)
+                else:
+                    messagebox.showwarning("Ошибка", "Для этого задания нет доступного решения.")
+
+        load_submitted_assignments()
+
+        # Добавляем кнопку для просмотра решения
+        tk.Button(teacher_frame, text="Просмотреть решение", command=view_submission, bg="#8A2BE2", fg="black",
+                  font=("Arial", 14), width=22, height=2).pack(pady=10)
+
+        def exit_teacher():
+            teacher_window.destroy()
+            self.root.deiconify()
+
+        tk.Button(teacher_frame, text="Выход", command=exit_teacher, bg="#FF5733", fg="black", font=("Arial", 14),
+                  width=22, height=2, relief="raised", bd=5).pack(pady=20)
+
+
+    def open_student_window(self, username):
+        student_window = tk.Toplevel(self.root)
+        student_window.title("Ученик")
+        student_window.geometry("600x800")
+        student_window.configure(bg="#E6E6FA")
+
+        tk.Label(student_window, text="Ваши задания:", font=("Arial", 16), bg="#E6E6FA", fg="black").pack(pady=10)
+        assignments_listbox = tk.Listbox(student_window, font=("Arial", 14), height=10, width=50)
+        assignments_listbox.pack(pady=10)
+
+        assignments = Assignment.get_by_student(username)
+        for assignment in assignments.values():
+            assignments_listbox.insert(tk.END, f"{assignment['title']} - {assignment['deadline']}")
+
+        def show_assignment_details():
+            selected_assignment = assignments_listbox.curselection()
+            if selected_assignment:
+                assignment_title = assignments_listbox.get(selected_assignment[0]).split(" - ")[0]
+                assignment_data = next(
+                    (a for a in assignments.values() if a["title"] == assignment_title), None
+                )
+                if assignment_data:
+                    self.show_assignment_description(assignment_data)
+
+        # Add a text field for submission
+        tk.Label(student_window, text="Введите ваш ответ/задание:", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=10)
+        entry_submission = tk.Entry(student_window, font=("Arial", 14), width=40)
+        entry_submission.pack(pady=10)
+
+        def submit_homework():
+            selected_assignment = assignments_listbox.curselection()
+            if selected_assignment:
+                assignment_title = assignments_listbox.get(selected_assignment[0]).split(" - ")[0]
+                assignment_data = next(
+                    (a for a in assignments.values() if a["title"] == assignment_title), None
+                )
+                if assignment_data:
+                    submission = entry_submission.get()
+                    if submission:
+                        assignment_data["submission"] = submission  # Сохранение ответа ученика
+
+                        # Обновляем файл с заданиями
+                        assignments[assignment_title] = assignment_data
+                        with open(ASSIGNMENTS_FILE, 'w') as f:
+                            json.dump(assignments, f, indent=4)
+
+                        messagebox.showinfo("Успех", f"Задание '{assignment_title}' успешно отправлено!")
+                        entry_submission.delete(0, tk.END)
+                    else:
+                        messagebox.showwarning("Ошибка", "Пожалуйста, введите решение задания!")
+
+        tk.Button(student_window, text="Отправить задание", command=submit_homework, bg="#4CAF50", fg="black", font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=10)
+        tk.Button(student_window, text="Просмотр", command=show_assignment_details, bg="#4CAF50", fg="black", font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=20)
+        tk.Button(student_window, text="Выход", command=student_window.destroy, bg="#FF5733", fg="black", font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=20)
+
+    def show_assignment_description(self, assignment_data):
+        description_window = tk.Toplevel(self.root)
+        description_window.title(f"Описание задания: {assignment_data['title']}")
+        description_window.geometry("600x500")
+        description_window.configure(bg="#E6E6FA")
+
+        tk.Label(description_window, text=f"Задание: {assignment_data['title']}", font=("Arial", 16), bg="#E6E6FA", fg="black").pack(pady=10)
+        tk.Label(description_window, text=f"Описание: {assignment_data['description']}", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=10)
+        tk.Label(description_window, text=f"Крайний срок: {assignment_data['deadline']}", font=("Arial", 14), bg="#E6E6FA", fg="black").pack(pady=10)
+        tk.Button(description_window, text="Закрыть", command=description_window.destroy, bg="#FF5733", fg="black", font=("Arial", 14), width=22, height=2, relief="raised", bd=5).pack(pady=20)
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = Application(root)
+    root.mainloop()
